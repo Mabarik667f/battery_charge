@@ -4,3 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+serde = "1.0.210"
+serde_derive = "1.0.210"
+cron = "0.12.1"
+chrono = "0.4.38"
+fork = "0.2.0"
+toml = "0.8.19"
