@@ -1,5 +1,6 @@
-use battery_charge::{get_all_batteries, get_data_for_batteries, Config};
+use battery_charge::{get_all_batteries, get_data_for_batteries};
 use chrono::Utc;
+use config::Config;
 use cron::Schedule;
 use std::env;
 use std::process;
@@ -8,6 +9,7 @@ use std::str::FromStr;
 use std::thread;
 use toml_parser::read_notification_data;
 
+pub mod config;
 pub mod toml_parser;
 
 fn main() {

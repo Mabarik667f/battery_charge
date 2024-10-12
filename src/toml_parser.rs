@@ -26,6 +26,5 @@ pub fn read_notification_data() -> Result<NotificationData, &'static str> {
             return Err("Error load data for toml file");
         }
     };
-    println!("{data:#?}");
     Ok(data)
 }
