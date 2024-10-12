@@ -1,42 +1,93 @@
-use std::env;
 use std::fs;
 use std::path;
+use std::process::Command;
+use std::thread;
+
+use chrono::Utc;
+use cron::Schedule;
+use serde_derive::Deserialize;
+use toml;
+
+#[derive(Debug, Deserialize)]
+pub struct NotificationData {
+    pub config: Config,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Config {
+    pub title: String,
+    pub text: String,
+    pub time_period: u8,
+    pub min_lifetime_percentage: u8,
+}
+
+pub fn read_notification_data() -> Result<NotificationData, &'static str> {
+    let contents = match fs::read_to_string("notification.toml") {
+        Ok(c) => c,
+        Err(_) => {
+            return Err("Could not read file");
+        }
+    };
+    let data: NotificationData = match toml::from_str(&contents) {
+        Ok(d) => d,
+        Err(_) => {
+            return Err("Error load data for toml file");
+        }
+    };
+    Ok(data)
+}
 
 #[derive(Debug)]
-pub struct Battery {
+struct Battery {
     capacity: u8,
     status: ChargingStatus,
 }
 
 #[derive(Debug)]
-pub enum ChargingStatus {
+enum ChargingStatus {
     Charging,
     Notcharging,
 }
 
 impl Battery {
     pub fn new(path: &str) -> Battery {
-        let capacity = get_battery_capacity(path);
-        let status = get_battery_status(path);
-        Battery { capacity, status }
+        Battery {
+            capacity: get_battery_capacity(path),
+            status: get_battery_status(path),
+        }
     }
 }
 
-pub fn run() {}
+pub fn run(schedule: Schedule, config: Config) {
+    let bats_paths = get_all_batteries_paths();
+    loop {
+        let batteries = get_batteries(&bats_paths);
+        let battery_is_low = get_data_for_batteries(batteries, config.min_lifetime_percentage);
+        if battery_is_low {
+            let notification_data = vec![&config.title, &config.text];
+            let _ = Command::new("notify-send").args(&notification_data).spawn();
+        }
+        let datetime = schedule.upcoming(Utc).next().unwrap();
+        let until = datetime - Utc::now();
+        thread::sleep(until.to_std().unwrap());
+    }
+}
 
 fn get_battery_capacity(path: &str) -> u8 {
-    let abs_path = path::absolute(format!("{path}/capacity")).unwrap();
+    let abs_path =
+        path::absolute(format!("{path}/capacity")).expect("Capacity param not found this dir");
     fs::read_to_string(abs_path)
-        .unwrap()
+        .expect("Error reading file")
         .trim()
         .parse::<u8>()
-        .unwrap()
+        .expect("Conversion error to integer")
 }
 
 fn get_battery_status(path: &str) -> ChargingStatus {
-    let abs_path = path::absolute(format!("{path}/status")).unwrap();
+    let abs_path =
+        path::absolute(format!("{path}/status")).expect("Status param not found this dir");
     match fs::read_to_string(abs_path)
-        .unwrap()
+        .expect("Error reading file")
         .replace(" ", "")
         .trim()
         .to_string()
@@ -48,33 +99,38 @@ fn get_battery_status(path: &str) -> ChargingStatus {
     }
 }
 
-pub fn get_all_batteries() -> Vec<Battery> {
-    let abs_path = path::absolute("/sys/class/power_supply/").unwrap();
+fn get_batteries(bats_paths: &Vec<String>) -> Vec<Battery> {
     let mut batteries: Vec<Battery> = Vec::new();
-    let mut c = 0;
-
-    loop {
-        let path_to_bat = format!("{}/BAT{}", abs_path.to_str().unwrap(), c);
-        let p = &path_to_bat;
-        let bat = path::absolute(p).unwrap();
-        if !bat.exists() {
-            println!("not Exists!");
-            break;
-        }
-        batteries.push(Battery::new(p));
-        println!("{bat:#?}");
-        c += 1
+    for b_path in bats_paths {
+        batteries.push(Battery::new(&b_path));
     }
-    println!("{batteries:#?}");
     batteries
 }
 
-pub fn get_data_for_batteries(batteries: Vec<Battery>) -> bool {
+fn get_all_batteries_paths() -> Vec<String> {
+    let abs_path =
+        path::absolute("/sys/class/power_supply/").expect("Power supply param not found this dir");
+    let mut batteries: Vec<String> = Vec::new();
+
+    for dir in fs::read_dir(&abs_path).expect("Dir not found") {
+        let word = dir.unwrap().file_name().into_string().unwrap();
+        if word.contains("BAT") {
+            let path_to_bat = format!("{}/{}", abs_path.to_str().unwrap(), word);
+            batteries.push(path_to_bat);
+        }
+    }
+    if batteries.len() == 0 {
+        panic!("Batteries not found or batteries have custom names!");
+    }
+    batteries
+}
+
+fn get_data_for_batteries(batteries: Vec<Battery>, min_percentage: u8) -> bool {
     let batteries_ref = &batteries;
     let total_cap = get_total_capacity(batteries_ref);
     let is_device_charging = any_battery_charging(batteries_ref);
 
-    if total_cap > 20 || is_device_charging {
+    if total_cap > min_percentage || is_device_charging {
         false
     } else {
         true
