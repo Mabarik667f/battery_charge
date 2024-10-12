@@ -3,6 +3,11 @@ This util get total battery cap and charging status
 and sends a notification when the battery is critically low
 (if not one of the batteries is not charging)
 
+Test environemnt:
+  - Manjaro
+  - Hyprland
+  - sway
+
 ## In The notification.toml can be configured:
   - title: title of the notification
   - text: text of the notification
