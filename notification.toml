@@ -1,0 +1,5 @@
+[config]
+title = "Battery low!"
+text = "The charge of battery has fallen below the set value"
+time_period = 1
+min_lifetime_percentage = 20
