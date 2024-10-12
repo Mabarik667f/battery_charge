@@ -62,7 +62,7 @@ pub fn run(schedule: Schedule, config: Config) {
     let bats_paths = get_all_batteries_paths();
     loop {
         let batteries = get_batteries(&bats_paths);
-        let battery_is_low = get_data_for_batteries(batteries, config.min_lifetime_percentage);
+        let battery_is_low = batteries_is_low(batteries, config.min_lifetime_percentage);
         if battery_is_low {
             let notification_data = vec![&config.title, &config.text];
             let _ = Command::new("notify-send").args(&notification_data).spawn();
@@ -125,7 +125,7 @@ fn get_all_batteries_paths() -> Vec<String> {
     batteries
 }
 
-fn get_data_for_batteries(batteries: Vec<Battery>, min_percentage: u8) -> bool {
+fn batteries_is_low(batteries: Vec<Battery>, min_percentage: u8) -> bool {
     let batteries_ref = &batteries;
     let total_cap = get_total_capacity(batteries_ref);
     let is_device_charging = any_battery_charging(batteries_ref);
@@ -155,4 +155,90 @@ fn any_battery_charging(batteries: &Vec<Battery>) -> bool {
         }
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TestContext {
+        bat_low_not: Battery,
+        bat_high_not: Battery,
+        bat_low_ch: Battery,
+        bat_high_ch: Battery,
+    }
+
+    fn setup() -> TestContext {
+        TestContext {
+            bat_low_not: Battery {
+                capacity: 10,
+                status: ChargingStatus::Notcharging,
+            },
+            bat_high_not: Battery {
+                capacity: 80,
+                status: ChargingStatus::Notcharging,
+            },
+            bat_low_ch: Battery {
+                capacity: 10,
+                status: ChargingStatus::Charging,
+            },
+            bat_high_ch: Battery {
+                capacity: 80,
+                status: ChargingStatus::Charging,
+            },
+        }
+    }
+
+    #[test]
+    fn battery_low_notcharging_status() {
+        let bats = setup();
+        assert_eq!(any_battery_charging(&vec![bats.bat_low_not]), false);
+    }
+
+    #[test]
+    fn battery_low_charging_status() {
+        let bats = setup();
+        assert_eq!(any_battery_charging(&vec![bats.bat_low_ch]), true);
+    }
+    #[test]
+    fn batteries_low_one_charging_status() {
+        let bats = setup();
+        assert_eq!(
+            any_battery_charging(&vec![bats.bat_low_not, bats.bat_low_ch]),
+            true
+        );
+    }
+
+    #[test]
+    fn total_cap_one_battery() {
+        let bats = setup();
+        assert_eq!(get_total_capacity(&vec![bats.bat_high_ch]), 80)
+    }
+
+    #[test]
+    fn total_cap_three_batteries() {
+        let bats = setup();
+        assert_eq!(
+            get_total_capacity(&vec![bats.bat_high_ch, bats.bat_low_ch, bats.bat_high_not]),
+            56
+        );
+    }
+
+    #[test]
+    fn batteries_is_low_one_charging() {
+        let bats = setup();
+        assert_eq!(
+            batteries_is_low(vec![bats.bat_low_not, bats.bat_low_ch], 20),
+            false
+        );
+    }
+
+    #[test]
+    fn batteries_is_low_no_charging() {
+        let bats = setup();
+        assert_eq!(
+            batteries_is_low(vec![bats.bat_low_not, bats.bat_high_not], 50),
+            true
+        );
+    }
 }
