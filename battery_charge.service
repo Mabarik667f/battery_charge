@@ -1,5 +1,6 @@
 [Unit]
 Description=Test Daemon
+After=multi-user.target
 
 [Service]
 Environment=DISPLAY=:0
@@ -10,7 +11,7 @@ Type=simple
 User=mamba
 WorkingDirectory=/path/to/binary
 ExecStart=/path/to/binary
-Restart=always
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
